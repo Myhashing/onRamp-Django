@@ -5,10 +5,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from customer.models import CustomerProfile
+from kyc.service import perform_kyc_verification
 from rate.service import fetch_rate
-from .models import BookedRate
+from .models import BookedRate, Order
 from .serializers import OrderInputSerializer,UserRegistrationSerializer, \
     ExtendedRateAcceptanceSerializer
+from .service import create_unpaid_order
 
 
 class GetRateView(APIView):
@@ -42,8 +44,9 @@ class RateAcceptanceView(APIView):
             user = User.objects.filter(username=national_code).first()
             if user:
                 # Verify KYC status and proceed
-                if user.customerprofile.kyc_verified:
-                    return self.process_payment(uuid)
+                if user.customerprofile.kyc_verified or perform_kyc_verification(user):
+                    order = create_unpaid_order(uuid, user)
+                    return self.process_payment(order)
                 else:
                     return Response({'error': 'KYC not verified.'}, status=status.HTTP_401_UNAUTHORIZED)
             else:
@@ -52,19 +55,28 @@ class RateAcceptanceView(APIView):
                 if registration_serializer.is_valid():
                     user = registration_serializer.save()
                     # Perform KYC and other verifications here
-                    return self.process_payment(uuid)
+                    if perform_kyc_verification(user):
+                        order = create_unpaid_order(uuid, user)
+                        return self.process_payment(order)
+                    else:
+                        return Response({'error':'KYC verification failed.'}, status=status.HTTP_401_UNAUTHORIZED)
                 else:
                     return Response(registration_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def process_payment(self, uuid):
+
+
+    def process_payment(self, order):
         try:
             booked_rate = BookedRate.objects.get(tracking_number=uuid)
             # Proceed to payment process logic here
             return Response({'message': 'Proceed to payment.'}, status=status.HTTP_200_OK)
         except BookedRate.DoesNotExist:
             return Response({'error': 'Invalid or expired rate.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+
 
 class UserRegistrationView(APIView):
     @swagger_auto_schema(request_body=UserRegistrationSerializer)

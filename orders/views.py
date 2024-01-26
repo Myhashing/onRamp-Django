@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from customer.models import CustomerProfile
 from rate.service import fetch_rate
 from .models import BookedRate
-from .serializers import OrderInputSerializer, RateAcceptanceSerializer, UserRegistrationSerializer
+from .serializers import OrderInputSerializer,UserRegistrationSerializer, \
+    ExtendedRateAcceptanceSerializer
 
 
 class GetRateView(APIView):
@@ -31,37 +32,39 @@ class GetRateView(APIView):
 
 
 class RateAcceptanceView(APIView):
-    @swagger_auto_schema(request_body=RateAcceptanceSerializer)
+    @swagger_auto_schema(request_body=ExtendedRateAcceptanceSerializer)
     def post(self, request, *args, **kwargs):
-        serializer = RateAcceptanceSerializer(data=request.data)
+        serializer = ExtendedRateAcceptanceSerializer(data=request.data)
         if serializer.is_valid():
             uuid = serializer.validated_data['uuid']
-            mobile = serializer.validated_data['mobile']
-
-            user, created = User.objects.get_or_create(username=mobile)
-            if created:
-                # Ask for registration and KYC details
-                return Response({'message': 'Please complete registration and KYC.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            # Check KYC status
-            try:
+            national_code = serializer.validated_data.get('national_code')
+            # Check if national code exists and user exists
+            user = User.objects.filter(username=national_code).first()
+            if user:
+                # Verify KYC status and proceed
                 if user.customerprofile.kyc_verified:
-                    # Check the validity of booked rate and proceed
-                    try:
-                        booked_rate = BookedRate.objects.get(tracking_number=uuid)
-                        # Proceed to payment
-                        # ...
-                    except BookedRate.DoesNotExist:
-                        return Response({'error': 'Invalid or expired rate.'}, status=status.HTTP_404_NOT_FOUND)
+                    return self.process_payment(uuid)
                 else:
-                    return Response({'message': 'Please complete your KYC.'}, status=status.HTTP_401_UNAUTHORIZED)
-            except CustomerProfile.DoesNotExist:
-                return Response({'error': 'Customer profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+                    return Response({'error': 'KYC not verified.'}, status=status.HTTP_401_UNAUTHORIZED)
+            else:
+                # Handle user registration
+                registration_serializer = UserRegistrationSerializer(data=serializer.validated_data)
+                if registration_serializer.is_valid():
+                    user = registration_serializer.save()
+                    # Perform KYC and other verifications here
+                    return self.process_payment(uuid)
+                else:
+                    return Response(registration_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({'message': 'Rate accepted. Proceed to payment.'}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    def process_payment(self, uuid):
+        try:
+            booked_rate = BookedRate.objects.get(tracking_number=uuid)
+            # Proceed to payment process logic here
+            return Response({'message': 'Proceed to payment.'}, status=status.HTTP_200_OK)
+        except BookedRate.DoesNotExist:
+            return Response({'error': 'Invalid or expired rate.'}, status=status.HTTP_404_NOT_FOUND)
 
 class UserRegistrationView(APIView):
     @swagger_auto_schema(request_body=UserRegistrationSerializer)

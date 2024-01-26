@@ -9,6 +9,8 @@ class CustomerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     national_code = models.CharField(max_length=10)
     emergency_mobile = models.CharField(max_length=20, null=True)
+    mobile = models.CharField(max_length=20, null=True, blank=True)
+    kyc_verified = models.BooleanField(default=False)  # Add this line
 
     def __str__(self):
         return self.user.username

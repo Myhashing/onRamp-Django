@@ -128,3 +128,8 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ZARINPAL_MERCHANT_ID = "e63b2dea-4e84-11e7-b42a-000c295eb8fc"
+ZARINPAL_API_REQUEST = "https://www.zarinpal.com/pg/rest/WebGate/PaymentRequest.json"
+ZARINPAL_API_VERIFY = "https://www.zarinpal.com/pg/rest/WebGate/PaymentVerification.json"
+ZARINPAL_API_STARTPAY = "https://www.zarinpal.com/pg/StartPay/"
+ZARINPAL_CALLBACK_URL = 'http://127.0.0.1:8080/verify/'

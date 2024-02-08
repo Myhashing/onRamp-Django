@@ -1,7 +1,8 @@
 from django.urls import path
 from . import views
+from .zarinpal import send_request, verify
 
 urlpatterns = [
-    path('request/', views.send_request, name='request'),
-    path('verify/', views.verify , name='verify'),
+    path('request/', send_request, name='request'),
+    path('verify/', verify , name='verify'),
 ]

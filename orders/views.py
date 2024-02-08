@@ -4,11 +4,11 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from customer.models import CustomerProfile
 from kyc.service import perform_kyc_verification
+from payment.zarinpal import send_request
 from rate.service import fetch_rate
-from .models import BookedRate, Order
-from .serializers import OrderInputSerializer,UserRegistrationSerializer, \
+from .models import BookedRate
+from .serializers import OrderInputSerializer, UserRegistrationSerializer, \
     ExtendedRateAcceptanceSerializer
 from .service import create_unpaid_order
 
@@ -59,23 +59,35 @@ class RateAcceptanceView(APIView):
                         order = create_unpaid_order(uuid, user)
                         return self.process_payment(order)
                     else:
-                        return Response({'error':'KYC verification failed.'}, status=status.HTTP_401_UNAUTHORIZED)
+                        return Response({'error': 'KYC verification failed.'}, status=status.HTTP_401_UNAUTHORIZED)
                 else:
                     return Response(registration_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-
     def process_payment(self, order):
         try:
-            booked_rate = BookedRate.objects.get(tracking_number=uuid)
-            # Proceed to payment process logic here
-            return Response({'message': 'Proceed to payment.'}, status=status.HTTP_200_OK)
+            booked_rate = BookedRate.objects.get(tracking_number=order.uuid)
+
+            # Prepare payment details
+            amount = booked_rate.amount
+            description = f"Payment for Order ID: {order.id}"
+            
+            # Initiate payment process
+            payment_response = send_request(amount, description)
+
+            if payment_response.get('status'):
+                # Redirect user to payment URL or process further
+                payment_url = payment_response.get('url')
+                return Response({'message': 'Proceed to payment.', 'payment_url': payment_url},
+                                status=status.HTTP_200_OK)
+            else:
+                # Handle payment initiation failure
+                return Response({'error': payment_response.get('error', 'Payment initiation failed.')},
+                                status=status.HTTP_400_BAD_REQUEST)
+
         except BookedRate.DoesNotExist:
             return Response({'error': 'Invalid or expired rate.'}, status=status.HTTP_404_NOT_FOUND)
-
-
 
 
 class UserRegistrationView(APIView):
